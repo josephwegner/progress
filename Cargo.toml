@@ -1,0 +1,36 @@
+[package]
+name = "progress"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+bevy = { version = "0.14", default-features = false, features = [
+  "bevy_asset","bevy_winit","bevy_ui","bevy_sprite","bevy_core_pipeline","bevy_render","bevy_text","default_font","png","ktx2","zstd","webgl2"
+] }
+
+# RNG stack
+rand = "0.8"
+rand_pcg = "0.3"
+getrandom = { version = "0.3", features = ["wasm_js"] }
+uuid = { version = "1", features = ["rng-getrandom"] }
+
+# Pathfinding and job queue
+pathfinding = "4"
+priority-queue = "2"
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+bincode = "1"
+
+# Environment variables
+dotenvy = "0.15"
+
+# Web helpers
+wasm-bindgen = "0.2"
+console_error_panic_hook = "0.1"
+web-sys = "0.3.77"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+opt-level = "z"

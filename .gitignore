@@ -1,0 +1,29 @@
+# Rust
+/target
+Cargo.lock
+
+# Environment
+.env
+.env.local
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# AI/LLM
+.ai/
+
+# Trunk (WASM build tool)
+/dist
+
+# Debug/profiling
+*.pdb
+perf.data
+perf.data.old
+
+# OS
+Thumbs.db
