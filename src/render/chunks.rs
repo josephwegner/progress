@@ -107,6 +107,7 @@ pub fn spawn_chunk_entities(
 fn tile_index(kind: TileKind) -> u32 {
     match kind {
         TileKind::Ground    => 0,
+        TileKind::Wall      => 1,
         TileKind::Stockpile => 2,
         TileKind::Scavenge  => 3,
     }

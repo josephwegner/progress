@@ -87,8 +87,8 @@ pub fn bot_work_system(
                             bot.state = BotState::Hauling;
 
                             if let Some(path_nodes) = find_path(
-                                (bot_pos.x, bot_pos.y),
-                                (core_pos.x, core_pos.y),
+                                bot_pos.clone(),
+                                core_pos.clone(),
                                 &grid,
                             ) {
                                 if debug.log_pathfinding {

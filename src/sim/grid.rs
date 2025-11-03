@@ -5,12 +5,13 @@ pub const MAP_H: u32 = 64;
 pub const TILE_SIZE: f32 = 16.0; // world units
 
 #[repr(u8)]
-#[derive(Copy, Clone, Debug, Default)]
+#[derive(Copy, Clone, Debug, Default, PartialEq)]
 pub enum TileKind {
     #[default]
     Ground,
     Stockpile,
-    Scavenge
+    Scavenge,
+    Wall,
 }
 
 #[derive(Resource)]

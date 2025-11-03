@@ -1,7 +1,8 @@
 use bevy::prelude::*;
 use serde::{Serialize, Deserialize};
+use crate::sim::scouts::Scout;
 
-#[derive(Component, Clone, Debug, Serialize, Deserialize)]
+#[derive(Component, Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct Position {
     pub x: u32,
     pub y: u32,
@@ -41,7 +42,7 @@ impl Default for Bot {
 
 #[derive(Component, Clone, Debug)]
 pub struct Path {
-    pub nodes: Vec<(u32, u32)>,
+    pub nodes: Vec<Position>,
     pub current_idx: usize,
 }
 
@@ -127,7 +128,7 @@ pub fn spawn_initial_bots(
 }
 
 pub fn update_sprite_positions(
-    mut query: Query<(&Position, &mut Transform), Or<(With<Bot>, With<AICore>)>>,
+    mut query: Query<(&Position, &mut Transform), Or<(With<Bot>, With<AICore>, With<Scout>)>>,
 ) {
     for (pos, mut transform) in query.iter_mut() {
         transform.translation.x = pos.x as f32 * crate::sim::grid::TILE_SIZE;
