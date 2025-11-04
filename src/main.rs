@@ -14,6 +14,7 @@ mod sim {
     pub mod power_levels;
     pub mod speed_modifiers;
     pub mod notifications;
+    pub mod game_state;
 }
 mod render { pub mod atlas; pub mod chunks; }
 mod ui { pub mod input; pub mod hud; }
@@ -21,10 +22,11 @@ mod ui { pub mod input; pub mod hud; }
 use bevy::prelude::*;
 use bevy::asset::AssetMetaCheck;
 use sim::grid::{WorldGrid, MAP_W, MAP_H};
-use sim::resources::{GameResources, GameTime, tick_resources};
+use sim::resources::{GameResources, tick_resources};
 use sim::entities::{spawn_ai_core, spawn_initial_bots, update_sprite_positions};
 use sim::notifications::{NotificationHistory, setup_notification_ui, tick_notification_timers, update_notification_display};
-use sim::jobs::{JobQueue, create_scavenge_jobs};
+use sim::game_state::{GameTime, GameState, PowerCollapseTimer, check_win_condition, check_power_collapse, display_game_over};
+use sim::jobs::JobQueue;
 use sim::pathfinding::{assign_jobs_to_bots, move_entities_along_path};
 use sim::behavior::bot_work_system;
 use sim::buildings::{BuildMode, place_building_system, switch_build_mode, complete_buildings};
@@ -71,6 +73,8 @@ fn main() {
         .insert_resource(PaintTool::default())
         .insert_resource(GameResources::default())
         .insert_resource(GameTime::default())
+        .insert_resource(GameState::default())
+        .insert_resource(PowerCollapseTimer::new())
         .insert_resource(NotificationHistory::default())
         .insert_resource(JobQueue::default())
         .insert_resource(BuildMode::default())
@@ -104,13 +108,15 @@ fn main() {
             switch_build_mode,
             paint_brush,
             place_building_system,
-            create_scavenge_jobs,
             update_sprite_positions,
             spawn_scouts_system,
             scout_movement_system,
             scout_detection_system,
             tick_notification_timers,
             update_notification_display,
+            check_win_condition,
+            check_power_collapse,
+            display_game_over,
             update_hud,
             rebuild_dirty_chunks,
             apply_condition_effects_system,

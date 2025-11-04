@@ -1,6 +1,7 @@
 use bevy::prelude::*;
 use crate::sim::resources::GameResources;
 use crate::sim::buildings::BuildMode;
+use crate::sim::game_state::GameTime;
 
 #[derive(Component)]
 pub struct ResourcesText;
@@ -61,12 +62,11 @@ pub fn setup_hud(mut commands: Commands) {
                             "Controls:\n\
                             WASD - Pan Camera\n\
                             Mouse Wheel - Zoom\n\
-                            1 - Scavenge Tool\n\
+                            1 - Scavenge Tool (paint resources)\n\
                             2 - Stockpile Tool\n\
                             3 - Build Server Rack (20 scrap)\n\
                             4 - Build Power Node (15 scrap)\n\
                             5 - Build Bot (50 scrap)\n\
-                            Space - Create Jobs\n\
                             ESC - Cancel Build Mode",
                             TextStyle {
                                 font_size: 14.0,
@@ -83,6 +83,7 @@ pub fn setup_hud(mut commands: Commands) {
 pub fn update_hud(
     resources: Res<GameResources>,
     build_mode: Res<BuildMode>,
+    game_time: Res<GameTime>,
     mut text_query: Query<&mut Text, With<ResourcesText>>,
 ) {
     for mut text in text_query.iter_mut() {
@@ -102,8 +103,11 @@ pub fn update_hud(
             "(balanced)".to_string()
         };
 
+        let minutes = (game_time.elapsed_seconds as u32) / 60;
+        let seconds = (game_time.elapsed_seconds as u32) % 60;
         text.sections[0].value = format!(
-            "┌─ Resources ─────────────────┐\n\
+            "Game Time: {:02}:{:02}\n\
+             ┌─ Resources ─────────────────┐\n\
              │ Scrap: {}\n\
              │\n\
              │ Power: {}/{} {}\n\
@@ -114,6 +118,7 @@ pub fn update_hud(
              └─────────────────────────────┘\n\
              \n\
              Build Mode: {}",
+            minutes, seconds,
             resources.scrap,
             resources.power_stored,
             resources.power_cap,

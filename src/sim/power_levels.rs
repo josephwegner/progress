@@ -54,6 +54,11 @@ pub fn power_management_system(
     mut power_consumers: Query<&mut PowerConsumer>,
     mut game_resources: ResMut<GameResources>
 ) {
+    // Reset all power consumers back to normal level
+    for mut consumer in power_consumers.iter_mut() {
+        consumer.power_level = PowerLevel::Normal;
+    }
+
     let total_power_generation = power_generators.iter().map(|generator| generator.generation_rate as i32).sum::<i32>();
     let mut total_power_demand = power_consumers.iter().map(|consumer| consumer.current_consumption() as i32).sum::<i32>();
 
@@ -63,7 +68,9 @@ pub fn power_management_system(
         }
     }
 
+    // Recalculate total power demand after setting low power level
     total_power_demand = power_consumers.iter().map(|consumer| consumer.current_consumption() as i32).sum::<i32>();
+
     if total_power_demand > total_power_generation {
         for mut consumer in power_consumers.iter_mut() {
             let usage = consumer.current_consumption() as i32;

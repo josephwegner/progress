@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use crate::sim::resources::GameTime;
+use crate::sim::game_state::GameTime;
 
 const NOTIFICATION_DURATION_INFO: f32 = 5.0;
 const NOTIFICATION_DURATION_WARNING: f32 = 10.0;

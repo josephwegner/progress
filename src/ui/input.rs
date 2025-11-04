@@ -58,11 +58,13 @@ pub fn switch_tools(
 }
 
 pub fn paint_brush(
+    mut commands: Commands,
     buttons: Res<ButtonInput<MouseButton>>,
     windows: Query<&Window>,
     q_primary: Query<&Window, With<PrimaryWindow>>,
     q_cam: Query<(&Camera, &GlobalTransform), With<MainCamera>>,
     mut grid: ResMut<WorldGrid>,
+    mut job_queue: ResMut<crate::sim::jobs::JobQueue>,
     tool: Res<PaintTool>,
     build_mode: Res<crate::sim::buildings::BuildMode>,
 ) {
@@ -93,7 +95,20 @@ pub fn paint_brush(
             PaintTool::Stockpile => TileKind::Stockpile,
         };
         let idx = grid.idx(gx, gy);
-        grid.tiles[idx] = kind;
-        grid.mark_chunk_dirty(gx, gy);
+
+        // Only paint if tile changed
+        if grid.tiles[idx] != kind {
+            grid.tiles[idx] = kind;
+            grid.mark_chunk_dirty(gx, gy);
+
+            // Create job immediately when painting Scavenge tile
+            if kind == TileKind::Scavenge {
+                job_queue.push(
+                    crate::sim::jobs::JobType::Scavenge { x: gx, y: gy },
+                    10,
+                    &mut commands,
+                );
+            }
+        }
     }
 }
