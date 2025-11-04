@@ -15,21 +15,51 @@ pub fn bot_work_system(
     debug: Res<crate::sim::debug::DebugSettings>,
 ) {
     for (bot_entity, mut bot, bot_pos) in bot_query.iter_mut() {
+        // Handle bots that are in Hauling state (they don't have a Path component)
         if bot.state == BotState::Hauling {
             if let Ok(core_pos) = core_query.get_single() {
                 if bot_pos.x == core_pos.x && bot_pos.y == core_pos.y {
+                    // Bot has reached the AI Core - deliver scrap
                     if debug.log_bot_behavior {
                         info!("Bot at ({},{}) delivering {} scrap to AI Core", bot_pos.x, bot_pos.y, bot.carry_scrap);
                     }
                     resources.add_scrap(bot.carry_scrap);
                     bot.carry_scrap = 0;
+                    bot.current_job = None; // Clear job reference
                     bot.state = BotState::Idle;
                     if debug.log_bot_behavior {
                         info!("Haul complete, bot now idle");
                     }
-                    continue;
+                } else {
+                    // Bot is hauling but not at core yet - try to find/retry path
+                    if debug.log_bot_behavior {
+                        info!("Hauling bot at ({},{}) has no path, trying to find path to AI Core at ({},{})",
+                              bot_pos.x, bot_pos.y, core_pos.x, core_pos.y);
+                    }
+
+                    if let Some(path_nodes) = find_path(
+                        bot_pos.clone(),
+                        core_pos.clone(),
+                        &grid,
+                    ) {
+                        if debug.log_pathfinding {
+                            info!("Path found for hauling bot: {} steps", path_nodes.len());
+                        }
+                        commands.entity(bot_entity).insert(Path {
+                            nodes: path_nodes,
+                            current_idx: 0,
+                            movement_cooldown: 0.0,
+                        });
+                    } else {
+                        if debug.log_bot_behavior {
+                            warn!("Hauling bot at ({},{}) still can't find path to AI Core, will retry next frame",
+                                  bot_pos.x, bot_pos.y);
+                        }
+                    }
                 }
             }
+            // Skip further processing for hauling bots
+            continue;
         }
 
         if bot.current_job.is_none() {
@@ -50,19 +80,22 @@ pub fn bot_work_system(
         }
 
         if job_to_process.is_none() {
-            warn!("Bot at ({},{}) has job entity {:?} but job not found in queue!",
+            warn!("Bot at ({},{}) has job entity {:?} but job not found in queue! Clearing job and returning to Idle.",
                   bot_pos.x, bot_pos.y, job_entity);
+            bot.current_job = None;
+            bot.state = BotState::Idle;
+            continue;
         }
 
         if let Some(job) = job_to_process {
             match &job.job_type {
                 JobType::Scavenge { x, y } => {
-                    // Bot can scavenge from adjacent tile (since resources are non-walkable)
+                    // Bot can scavenge from adjacent tile OR from on top of it
                     let dx = (bot_pos.x as i32 - *x as i32).abs();
                     let dy = (bot_pos.y as i32 - *y as i32).abs();
-                    let is_adjacent = dx + dy == 1;
+                    let is_adjacent_or_on = dx + dy <= 1;
 
-                    if is_adjacent {
+                    if is_adjacent_or_on {
                         if debug.log_bot_behavior {
                             info!("Bot at ({},{}) collecting scrap from scavenge tile", bot_pos.x, bot_pos.y);
                         }

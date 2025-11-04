@@ -36,35 +36,77 @@ pub fn assign_jobs_to_bots(
             info!("Idle bot at ({},{}) looking for job", bot_pos.x, bot_pos.y);
         }
 
-        if let Some(job) = job_queue.pop() {
-            let target_pos = match &job.job_type {
-                crate::sim::jobs::JobType::Scavenge { x, y } => {
-                    if debug.log_jobs {
-                        info!("Assigning Scavenge job at ({},{}) to bot at ({},{})", x, y, bot_pos.x, bot_pos.y);
-                    }
-                    Position { x: *x, y: *y }
-                },
-            };
+        // Try up to 5 jobs to find one that's reachable
+        let mut jobs_tried = 0;
+        let max_attempts = 5;
+        let mut found_job = false;
 
-            if let Some(path_nodes) = find_path(
-                bot_pos.clone(),
-                target_pos.clone(),
-                &grid,
-            ) {
-                if debug.log_pathfinding {
-                    info!("Path found: {} steps", path_nodes.len());
+        while jobs_tried < max_attempts && !found_job {
+            if let Some(job) = job_queue.pop() {
+                jobs_tried += 1;
+
+                let target_pos = match &job.job_type {
+                    crate::sim::jobs::JobType::Scavenge { x, y } => {
+                        if debug.log_jobs {
+                            info!("Assigning Scavenge job at ({},{}) to bot at ({},{})", x, y, bot_pos.x, bot_pos.y);
+                        }
+                        Position { x: *x, y: *y }
+                    },
+                };
+
+                // Check if bot is already adjacent to target (for non-walkable tiles like Scavenge)
+                let dx = (bot_pos.x as i32 - target_pos.x as i32).abs();
+                let dy = (bot_pos.y as i32 - target_pos.y as i32).abs();
+                let is_adjacent_or_on = dx + dy <= 1; // Adjacent (=1) or on target (=0)
+                let is_on_target = bot_pos.x == target_pos.x && bot_pos.y == target_pos.y;
+
+                // Check if target is walkable
+                let target_tile = grid.tiles[grid.idx(target_pos.x, target_pos.y)];
+                let target_is_walkable = target_tile == TileKind::Ground || target_tile == TileKind::Stockpile;
+
+                // If bot is already in position, assign job without pathfinding
+                // For non-walkable tiles (Scavenge): bot can be adjacent OR on top
+                // For walkable tiles: bot must be on target
+                if (is_adjacent_or_on && !target_is_walkable) || (is_on_target && target_is_walkable) {
+                    if debug.log_jobs {
+                        info!("Bot already in position for job (distance: {}), assigning directly without pathfinding", dx + dy);
+                    }
+                    bot.current_job = Some(job.entity);
+                    bot.state = crate::sim::entities::BotState::MovingToJob;
+                    job_queue.queue.push(job);
+                    found_job = true;
+                    break;
                 }
-                bot.current_job = Some(job.entity);
-                job_queue.queue.push(job);
-                commands.entity(bot_entity).insert(Path {
-                    nodes: path_nodes,
-                    current_idx: 0,
-                    movement_cooldown: 0.0 // Start moving immediately. MovementSystem will set this to 1.0 / current_speed
-                });
+
+                if let Some(path_nodes) = find_path(
+                    bot_pos.clone(),
+                    target_pos.clone(),
+                    &grid,
+                ) {
+                    if debug.log_pathfinding {
+                        info!("Path found: {} steps", path_nodes.len());
+                    }
+                    bot.current_job = Some(job.entity);
+                    bot.state = crate::sim::entities::BotState::MovingToJob;
+                    job_queue.queue.push(job);
+                    commands.entity(bot_entity).insert(Path {
+                        nodes: path_nodes,
+                        current_idx: 0,
+                        movement_cooldown: 0.0 // Start moving immediately. MovementSystem will set this to 1.0 / current_speed
+                    });
+                    found_job = true;
+                    break;
+                } else {
+                    if debug.log_jobs {
+                        warn!("No path found from ({},{}) to ({},{}), trying next job (attempt {}/{})",
+                              bot_pos.x, bot_pos.y, target_pos.x, target_pos.y, jobs_tried, max_attempts);
+                    }
+                    // Put job at the back of the queue and try the next one
+                    job_queue.queue.push(job);
+                }
             } else {
-                warn!("No path found from ({},{}) to ({},{}), requeueing job",
-                      bot_pos.x, bot_pos.y, target_pos.x, target_pos.y);
-                job_queue.queue.push(job);
+                // No more jobs available
+                break;
             }
         }
     }
