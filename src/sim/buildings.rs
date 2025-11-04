@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use crate::sim::entities::{Building, BuildingKind, Position};
+use crate::sim::entities::{Building, BuildingKind, Position, BuildProgressBar};
 use crate::sim::resources::GameResources;
 use crate::sim::grid::{WorldGrid, TileKind, TILE_SIZE};
 use crate::ui::input::PaintTool;
@@ -106,7 +106,7 @@ pub fn place_building_system(
                 BuildingKind::PowerNode => Color::srgb(0.2, 0.8, 0.3),
             };
 
-            let mut entity_commands = commands.spawn((
+            let building_entity = commands.spawn((
                 Building::new(kind.clone()),
                 Position { x: gx, y: gy },
                 SpriteBundle {
@@ -122,17 +122,58 @@ pub fn place_building_system(
                     ),
                     ..default()
                 },
-            ));
+            )).id();
 
             // Add power components based on building type
             match kind {
                 BuildingKind::ServerRack => {
-                    entity_commands.insert(PowerConsumer::new(3.0, 3.0, 1.0));
+                    commands.entity(building_entity).insert(PowerConsumer::new(3.0, 3.0, 1.0));
                 }
                 BuildingKind::PowerNode => {
-                    entity_commands.insert(PowerGenerator::new(5.0));
+                    commands.entity(building_entity).insert(PowerGenerator::new(5.0));
                 }
             }
+
+            // Spawn progress bar below building
+            let bar_width = TILE_SIZE * 0.7;
+            let bar_height = 4.0;
+            let bar_y_offset = -TILE_SIZE * 0.5;
+
+            // Background bar (dark gray)
+            commands.spawn((
+                SpriteBundle {
+                    sprite: Sprite {
+                        color: Color::srgb(0.2, 0.2, 0.2),
+                        custom_size: Some(Vec2::new(bar_width, bar_height)),
+                        ..default()
+                    },
+                    transform: Transform::from_xyz(
+                        gx as f32 * TILE_SIZE,
+                        gy as f32 * TILE_SIZE + bar_y_offset,
+                        1.6,
+                    ),
+                    ..default()
+                },
+                BuildProgressBar { building_entity },
+            ));
+
+            // Fill bar (green, starts at 0 width)
+            commands.spawn((
+                SpriteBundle {
+                    sprite: Sprite {
+                        color: Color::srgb(0.3, 0.8, 0.3),
+                        custom_size: Some(Vec2::new(0.0, bar_height)),
+                        ..default()
+                    },
+                    transform: Transform::from_xyz(
+                        gx as f32 * TILE_SIZE,
+                        gy as f32 * TILE_SIZE + bar_y_offset,
+                        1.7,
+                    ),
+                    ..default()
+                },
+                BuildProgressBar { building_entity },
+            ));
         }
     }
 }
@@ -179,6 +220,50 @@ pub fn complete_buildings(
                     resources.add_power_production(5);
                     resources.add_power_capacity(50);
                 }
+            }
+        }
+    }
+}
+
+pub fn update_progress_bars(
+    building_query: Query<(&Building, &Position)>,
+    mut progress_bar_query: Query<(&BuildProgressBar, &mut Sprite, &mut Transform)>,
+) {
+    let bar_width = TILE_SIZE * 0.7;
+    let bar_y_offset = -TILE_SIZE * 0.5;
+
+    for (progress_bar, mut sprite, mut transform) in progress_bar_query.iter_mut() {
+        if let Ok((building, building_pos)) = building_query.get(progress_bar.building_entity) {
+            if building.is_complete {
+                continue;
+            }
+
+            let progress = building.build_progress.clamp(0.0, 1.0);
+
+            // Only update the fill bar (green), not the background (gray)
+            if sprite.color.to_srgba().green > 0.5 {
+                let fill_width = bar_width * progress;
+                sprite.custom_size = Some(Vec2::new(fill_width, 4.0));
+
+                // Calculate position to keep bar left-aligned (sprites are center-anchored)
+                let base_x = building_pos.x as f32 * TILE_SIZE;
+                let offset = bar_width * (progress - 1.0) * 0.5;
+                transform.translation.x = base_x + offset;
+                transform.translation.y = building_pos.y as f32 * TILE_SIZE + bar_y_offset;
+            }
+        }
+    }
+}
+
+pub fn despawn_completed_progress_bars(
+    mut commands: Commands,
+    building_query: Query<&Building>,
+    progress_bar_query: Query<(Entity, &BuildProgressBar)>,
+) {
+    for (bar_entity, progress_bar) in progress_bar_query.iter() {
+        if let Ok(building) = building_query.get(progress_bar.building_entity) {
+            if building.is_complete {
+                commands.entity(bar_entity).despawn_recursive();
             }
         }
     }

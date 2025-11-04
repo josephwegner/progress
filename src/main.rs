@@ -29,7 +29,7 @@ use sim::game_state::{GameTime, GameState, PowerCollapseTimer, check_win_conditi
 use sim::jobs::JobQueue;
 use sim::pathfinding::{assign_jobs_to_bots, move_entities_along_path};
 use sim::behavior::bot_work_system;
-use sim::buildings::{BuildMode, place_building_system, switch_build_mode, complete_buildings};
+use sim::buildings::{BuildMode, place_building_system, switch_build_mode, complete_buildings, update_progress_bars, despawn_completed_progress_bars};
 use sim::debug::DebugSettings;
 use sim::scouts::{ScoutSpawnTimer, spawn_scouts_system, scout_movement_system, scout_detection_system};
 use ui::input::{setup_camera, camera_controls, paint_brush, switch_tools, PaintTool};
@@ -118,6 +118,8 @@ fn main() {
             check_power_collapse,
             display_game_over,
             update_hud,
+            update_progress_bars,
+            despawn_completed_progress_bars,
             rebuild_dirty_chunks,
             apply_condition_effects_system,
         ))

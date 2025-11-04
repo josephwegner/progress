@@ -74,6 +74,11 @@ impl Building {
     }
 }
 
+#[derive(Component)]
+pub struct BuildProgressBar {
+    pub building_entity: Entity,
+}
+
 pub fn spawn_ai_core(
     mut commands: Commands,
     grid: Res<crate::sim::grid::WorldGrid>,
