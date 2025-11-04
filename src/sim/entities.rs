@@ -1,6 +1,8 @@
 use bevy::prelude::*;
 use serde::{Serialize, Deserialize};
 use crate::sim::scouts::Scout;
+use crate::sim::power_levels::{PowerGenerator, PowerConsumer};
+use crate::sim::speed_modifiers::{SpeedModifiers, MovementSpeed, PowerLevelEffects};
 
 #[derive(Component, Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct Position {
@@ -44,6 +46,9 @@ impl Default for Bot {
 pub struct Path {
     pub nodes: Vec<Position>,
     pub current_idx: usize,
+    /// Cooldown timer in seconds until next movement. When <= 0, entity moves to next node.
+    /// Reset to 1.0 / current_speed after each movement.
+    pub movement_cooldown: f32,
 }
 
 #[derive(Component, Clone, Debug, Serialize, Deserialize)]
@@ -81,6 +86,7 @@ pub fn spawn_ai_core(
     commands.spawn((
         AICore,
         Position { x: core_x, y: core_y },
+        PowerGenerator::new(11.0),
         SpriteBundle {
             sprite: Sprite {
                 color: Color::srgb(0.2, 0.8, 1.0),
@@ -106,6 +112,10 @@ pub fn spawn_initial_bots(
                     x: (core_pos.x as i32 + offset) as u32,
                     y: core_pos.y
                 },
+                PowerConsumer::new(2.0, 5.0, 0.5),
+                SpeedModifiers::default(),
+                MovementSpeed::new(1.0),
+                PowerLevelEffects::new(0.2),
                 SpriteBundle {
                     sprite: Sprite {
                         color: Color::srgb(0.9, 0.9, 0.2),

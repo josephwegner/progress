@@ -3,6 +3,8 @@ use crate::sim::entities::{Building, BuildingKind, Position};
 use crate::sim::resources::GameResources;
 use crate::sim::grid::{WorldGrid, TileKind, TILE_SIZE};
 use crate::ui::input::PaintTool;
+use crate::sim::power_levels::{PowerGenerator, PowerConsumer};
+use crate::sim::speed_modifiers::{SpeedModifiers, MovementSpeed, PowerLevelEffects};
 
 #[derive(Resource, Default, Copy, Clone, Eq, PartialEq, Debug)]
 pub enum BuildMode {
@@ -42,6 +44,10 @@ pub fn place_building_system(
                         x: core_pos.x,
                         y: (core_pos.y as i32 + 2) as u32,
                     },
+                    PowerConsumer::new(2.0, 5.0, 0.5),
+                    SpeedModifiers::default(),
+                    MovementSpeed::new(1.0),
+                    PowerLevelEffects::new(0.2),
                     SpriteBundle {
                         sprite: Sprite {
                             color: Color::srgb(0.9, 0.9, 0.2),
@@ -100,8 +106,8 @@ pub fn place_building_system(
                 BuildingKind::PowerNode => Color::srgb(0.2, 0.8, 0.3),
             };
 
-            commands.spawn((
-                Building::new(kind),
+            let mut entity_commands = commands.spawn((
+                Building::new(kind.clone()),
                 Position { x: gx, y: gy },
                 SpriteBundle {
                     sprite: Sprite {
@@ -117,6 +123,16 @@ pub fn place_building_system(
                     ..default()
                 },
             ));
+
+            // Add power components based on building type
+            match kind {
+                BuildingKind::ServerRack => {
+                    entity_commands.insert(PowerConsumer::new(3.0, 3.0, 1.0));
+                }
+                BuildingKind::PowerNode => {
+                    entity_commands.insert(PowerGenerator::new(5.0));
+                }
+            }
         }
     }
 }

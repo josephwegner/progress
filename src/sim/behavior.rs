@@ -57,7 +57,12 @@ pub fn bot_work_system(
         if let Some(job) = job_to_process {
             match &job.job_type {
                 JobType::Scavenge { x, y } => {
-                    if bot_pos.x == *x && bot_pos.y == *y {
+                    // Bot can scavenge from adjacent tile (since resources are non-walkable)
+                    let dx = (bot_pos.x as i32 - *x as i32).abs();
+                    let dy = (bot_pos.y as i32 - *y as i32).abs();
+                    let is_adjacent = dx + dy == 1;
+
+                    if is_adjacent {
                         if debug.log_bot_behavior {
                             info!("Bot at ({},{}) collecting scrap from scavenge tile", bot_pos.x, bot_pos.y);
                         }
@@ -97,6 +102,7 @@ pub fn bot_work_system(
                                 commands.entity(bot_entity).insert(Path {
                                     nodes: path_nodes,
                                     current_idx: 0,
+                                    movement_cooldown: 0.0,
                                 });
                             } else {
                                 warn!("Failed to find path for haul job!");

@@ -9,6 +9,10 @@ mod sim {
     pub mod buildings;
     pub mod debug;
     pub mod scouts;
+    pub mod combat;
+    pub mod conditions;
+    pub mod power_levels;
+    pub mod speed_modifiers;
 }
 mod render { pub mod atlas; pub mod chunks; }
 mod ui { pub mod input; pub mod hud; }
@@ -27,6 +31,10 @@ use sim::scouts::{ScoutSpawnTimer, spawn_scouts_system, scout_movement_system, s
 use ui::input::{setup_camera, camera_controls, paint_brush, switch_tools, PaintTool};
 use ui::hud::{setup_hud, update_hud};
 use render::chunks::{setup_render, spawn_chunk_entities, rebuild_dirty_chunks};
+use sim::combat::combat_system;
+use sim::conditions::{condition_system, apply_condition_effects_system};
+use sim::power_levels::power_management_system;
+use sim::speed_modifiers::{update_power_level_speed_modifiers, calculate_movement_speed};
 
 #[cfg(target_arch = "wasm32")]
 use console_error_panic_hook;
@@ -73,7 +81,13 @@ fn main() {
         .add_systems(Startup, spawn_chunk_entities.after(setup_render))
         .add_systems(Startup, spawn_initial_bots.after(spawn_ai_core))
         .add_systems(FixedUpdate, (
+            power_management_system,
             tick_resources,
+            combat_system,
+            condition_system,
+            apply_condition_effects_system,
+            update_power_level_speed_modifiers,
+            calculate_movement_speed,
             move_entities_along_path,
             bot_work_system,
             assign_jobs_to_bots,
@@ -92,6 +106,7 @@ fn main() {
             scout_detection_system,
             update_hud,
             rebuild_dirty_chunks,
+            apply_condition_effects_system,
         ))
         .run();
 }

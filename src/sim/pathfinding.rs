@@ -2,23 +2,33 @@ use bevy::prelude::*;
 use pathfinding::prelude::astar;
 use crate::sim::grid::{WorldGrid, TileKind};
 use crate::sim::entities::{Bot, Position, Path};
+use crate::sim::power_levels::{PowerConsumer, PowerLevel};
+use crate::sim::speed_modifiers::MovementSpeed;
+
+/// Base time interval (in seconds) for moving 1 tile at speed 1.0
+/// Lower values = faster movement. 0.002 = ~500 tiles/sec at base speed.
+pub const BASE_MOVEMENT_INTERVAL: f32 = 0.005;
 
 pub fn assign_jobs_to_bots(
     mut commands: Commands,
-    mut bot_query: Query<(Entity, &mut Bot, &Position), Without<Path>>,
+    mut bot_query: Query<(Entity, &mut Bot, &Position, &PowerConsumer), Without<Path>>,
     mut job_queue: ResMut<crate::sim::jobs::JobQueue>,
     grid: Res<WorldGrid>,
     debug: Res<crate::sim::debug::DebugSettings>,
 ) {
-    let idle_bot_count = bot_query.iter().filter(|(_, bot, _)| bot.state == crate::sim::entities::BotState::Idle).count();
+    let idle_bot_count = bot_query.iter().filter(|(_, bot, _, _)| bot.state == crate::sim::entities::BotState::Idle).count();
     let jobs_available = job_queue.queue.len();
 
     if debug.log_jobs && idle_bot_count > 0 && jobs_available > 0 {
         info!("assign_jobs_to_bots: {} idle bots, {} jobs available", idle_bot_count, jobs_available);
     }
 
-    for (bot_entity, mut bot, bot_pos) in bot_query.iter_mut() {
+    for (bot_entity, mut bot, bot_pos, power_consumer) in bot_query.iter_mut() {
         if bot.state != crate::sim::entities::BotState::Idle {
+            continue;
+        }
+
+        if power_consumer.power_level == PowerLevel::Shutdown {
             continue;
         }
 
@@ -49,6 +59,7 @@ pub fn assign_jobs_to_bots(
                 commands.entity(bot_entity).insert(Path {
                     nodes: path_nodes,
                     current_idx: 0,
+                    movement_cooldown: 0.0 // Start moving immediately. MovementSystem will set this to 1.0 / current_speed
                 });
             } else {
                 warn!("No path found from ({},{}) to ({},{}), requeueing job",
@@ -61,10 +72,19 @@ pub fn assign_jobs_to_bots(
 
 pub fn move_entities_along_path(
     mut commands: Commands,
-    mut entity_query: Query<(Entity, &mut Position, &mut Path)>,
+    mut entity_query: Query<(Entity, &mut Position, &mut Path, &MovementSpeed, Option<&PowerConsumer>)>,
+    time: Res<Time>,
     debug: Res<crate::sim::debug::DebugSettings>,
 ) {
-    for (entity, mut pos, mut path) in entity_query.iter_mut() {
+    for (entity, mut pos, mut path, movement_speed, power_consumer) in entity_query.iter_mut() {
+        // Don't move shutdown entities
+        if let Some(pc) = power_consumer {
+            if pc.power_level == PowerLevel::Shutdown {
+                continue;
+            }
+        }
+
+        // Handle path completion
         if path.current_idx >= path.nodes.len() {
             if debug.log_pathfinding {
                 info!("Bot at ({},{}) reached end of path", pos.x, pos.y);
@@ -72,6 +92,15 @@ pub fn move_entities_along_path(
             commands.entity(entity).remove::<Path>();
             continue;
         }
+
+        // Don't move until cooldown is reached
+        path.movement_cooldown -= time.delta_seconds();
+        if path.movement_cooldown > 0.0 {
+            continue;
+        }
+
+        // Ok, let's move!
+        path.movement_cooldown = BASE_MOVEMENT_INTERVAL / movement_speed.current_speed;
 
         let target = &path.nodes[path.current_idx];
 
@@ -99,6 +128,10 @@ pub fn find_path(
     goal: Position,
     grid: &WorldGrid,
 ) -> Option<Vec<Position>> {
+    // Check if goal tile is walkable
+    let goal_tile = grid.tiles[grid.idx(goal.x, goal.y)];
+    let goal_is_walkable = goal_tile == TileKind::Ground || goal_tile == TileKind::Stockpile;
+
     let result = astar(
         &start,
         |pos| {
@@ -110,7 +143,11 @@ pub fn find_path(
                 let ny = pos.y as i32 + dy;
 
                 if nx >= 0 && ny >= 0 && nx < grid.w as i32 && ny < grid.h as i32 {
-                    neighbors.push((Position { x: nx as u32, y: ny as u32 }, 1u32));
+                    let tile = grid.tiles[grid.idx(nx as u32, ny as u32)];
+                    // Only allow movement through Ground and Stockpile tiles
+                    if tile == TileKind::Ground || tile == TileKind::Stockpile {
+                        neighbors.push((Position { x: nx as u32, y: ny as u32 }, 1u32));
+                    }
                 }
             }
             neighbors
@@ -118,7 +155,17 @@ pub fn find_path(
         |pos| {
             ((pos.x as i32 - goal.x as i32).abs() + (pos.y as i32 - goal.y as i32).abs()) as u32
         },
-        |pos| *pos == goal,
+        |pos| {
+            if goal_is_walkable {
+                // Goal is walkable: must reach exactly
+                *pos == goal
+            } else {
+                // Goal is non-walkable (e.g., resource): succeed when adjacent
+                let dx = (pos.x as i32 - goal.x as i32).abs();
+                let dy = (pos.y as i32 - goal.y as i32).abs();
+                dx + dy == 1
+            }
+        },
     );
 
     result.map(|(path, _cost)| path)

@@ -3,11 +3,14 @@ use rand::Rng;
 use crate::sim::grid::{WorldGrid, TileKind};
 use crate::sim::entities::{AICore, Position, Path};
 use crate::sim::pathfinding::find_path;
+use crate::sim::combat::{Attacker, AttackType, ATTACK_INTERVAL};
+use crate::sim::speed_modifiers::{SpeedModifiers, MovementSpeed};
 
 pub const SCOUT_DETECTION_RADIUS: f32 = 15.0;
-pub const SCOUT_JAMMING_RADIUS: f32 = 1.0;
+pub const SCOUT_JAMMING_RADIUS: f32 = 5.0;
 pub const SCOUT_WANDER_RANGE: u32 = 10;
 pub const SCOUT_SPAWN_INTERVAL: f32 = 120.0; // seconds
+pub const SCOUT_PATHING_RADIUS: f32 = 1.0;
 
 #[derive(Component, Clone, Debug, PartialEq, Eq)]
 pub enum ScoutState {
@@ -62,6 +65,8 @@ fn spawn_scout(commands: &mut Commands, grid: &WorldGrid) {
     commands.spawn((
         Scout { state: ScoutState::Wandering },
         Position { x: position.0, y: position.1 },
+        SpeedModifiers::default(),
+        MovementSpeed::new(1.5),
         SpriteBundle {
             sprite: Sprite {
                 color: Color::srgb(1.0, 0.2, 0.2),
@@ -126,6 +131,7 @@ pub fn scout_movement_system(
                 commands.entity(entity).insert(crate::sim::entities::Path {
                     nodes: path_nodes,
                     current_idx: 0,
+                    movement_cooldown: 0.0,
                 });
             }
         }
@@ -141,14 +147,20 @@ pub fn scout_detection_system(
 ) {
     if let Ok(ai_core_pos) = ai_core.get_single() {
         for (entity, mut scout, position) in scouts.iter_mut() {
-            if scout.state != ScoutState::Detected {
-                let distance = (position.x as f32 - ai_core_pos.x as f32).powi(2) + (position.y as f32 - ai_core_pos.y as f32).powi(2);
-                if distance <= SCOUT_JAMMING_RADIUS.powi(2) {
-                    scout.state = ScoutState::Jamming;
-                    commands.entity(entity).remove::<Path>();
-                    
-                    info!("Scout at ({},{}) is jamming", position.x, position.y);
-                } else if distance <= SCOUT_DETECTION_RADIUS.powi(2) && !is_line_blocked_by_walls(position, ai_core_pos, &grid) {
+            let distance = (position.x as f32 - ai_core_pos.x as f32).powi(2) + (position.y as f32 - ai_core_pos.y as f32).powi(2);
+
+            if scout.state != ScoutState::Jamming && distance <= SCOUT_PATHING_RADIUS.powi(2) {
+                scout.state = ScoutState::Jamming;
+                commands.entity(entity).remove::<Path>();
+                commands.entity(entity).insert(Attacker {
+                    cooldown: Timer::from_seconds(ATTACK_INTERVAL, TimerMode::Repeating),
+                    attack_type: AttackType::JammingPulse,
+                });
+                info!("Scout at ({},{}) is jamming", position.x, position.y);
+
+                continue;
+            } else if scout.state != ScoutState::Detected && scout.state != ScoutState::Jamming {
+                if distance <= SCOUT_DETECTION_RADIUS.powi(2) && !is_line_blocked_by_walls(position, ai_core_pos, &grid) {
                     info!("Scout at ({},{}) is detected at distance {}", position.x, position.y, distance);
                     let path_to_core = find_path(position.clone(), ai_core_pos.clone(), &grid);
 
@@ -157,6 +169,7 @@ pub fn scout_detection_system(
                         commands.entity(entity).insert(Path {
                             nodes: path_nodes,
                             current_idx: 0,
+                            movement_cooldown: 0.0,
                         });
                     }
 
