@@ -1,6 +1,12 @@
 use bevy::prelude::*;
 use serde::{Serialize, Deserialize};
 
+/// Tracks elapsed game time for notifications, win/lose conditions, and events
+#[derive(Resource, Default)]
+pub struct GameTime {
+    pub elapsed_seconds: f64,
+}
+
 #[derive(Resource, Clone, Debug, Serialize, Deserialize)]
 pub struct GameResources {
     pub scrap: i32,

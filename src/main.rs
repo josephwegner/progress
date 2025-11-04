@@ -13,6 +13,7 @@ mod sim {
     pub mod conditions;
     pub mod power_levels;
     pub mod speed_modifiers;
+    pub mod notifications;
 }
 mod render { pub mod atlas; pub mod chunks; }
 mod ui { pub mod input; pub mod hud; }
@@ -20,8 +21,9 @@ mod ui { pub mod input; pub mod hud; }
 use bevy::prelude::*;
 use bevy::asset::AssetMetaCheck;
 use sim::grid::{WorldGrid, MAP_W, MAP_H};
-use sim::resources::{GameResources, tick_resources};
+use sim::resources::{GameResources, GameTime, tick_resources};
 use sim::entities::{spawn_ai_core, spawn_initial_bots, update_sprite_positions};
+use sim::notifications::{NotificationHistory, setup_notification_ui, tick_notification_timers, update_notification_display};
 use sim::jobs::{JobQueue, create_scavenge_jobs};
 use sim::pathfinding::{assign_jobs_to_bots, move_entities_along_path};
 use sim::behavior::bot_work_system;
@@ -68,6 +70,8 @@ fn main() {
         .insert_resource(WorldGrid::new(MAP_W, MAP_H, 32, 32))
         .insert_resource(PaintTool::default())
         .insert_resource(GameResources::default())
+        .insert_resource(GameTime::default())
+        .insert_resource(NotificationHistory::default())
         .insert_resource(JobQueue::default())
         .insert_resource(BuildMode::default())
         .insert_resource(DebugSettings::from_env())
@@ -76,6 +80,7 @@ fn main() {
             setup_camera,
             setup_render,
             setup_hud,
+            setup_notification_ui,
             spawn_ai_core,
         ))
         .add_systems(Startup, spawn_chunk_entities.after(setup_render))
@@ -104,6 +109,8 @@ fn main() {
             spawn_scouts_system,
             scout_movement_system,
             scout_detection_system,
+            tick_notification_timers,
+            update_notification_display,
             update_hud,
             rebuild_dirty_chunks,
             apply_condition_effects_system,

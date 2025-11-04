@@ -5,6 +5,7 @@ use crate::sim::entities::{AICore, Position, Path};
 use crate::sim::pathfinding::find_path;
 use crate::sim::combat::{Attacker, AttackType, ATTACK_INTERVAL};
 use crate::sim::speed_modifiers::{SpeedModifiers, MovementSpeed};
+use crate::sim::notifications::{Notification, NotificationSeverity};
 
 pub const SCOUT_DETECTION_RADIUS: f32 = 15.0;
 pub const SCOUT_JAMMING_RADIUS: f32 = 5.0;
@@ -52,6 +53,10 @@ pub fn spawn_scouts_system(
 
     if should_spawn {
         spawn_scout(&mut commands, &grid);
+        commands.spawn(Notification::new(
+            "Scout spawned!".to_string(),
+            NotificationSeverity::Warning,
+        ));
 
         // Reset timer when spawning
         timer_resource.timer.reset();
