@@ -5,6 +5,7 @@ use crate::sim::grid::{WorldGrid, TileKind, TILE_SIZE};
 use crate::ui::input::PaintTool;
 use crate::sim::power_levels::{PowerGenerator, PowerConsumer};
 use crate::sim::speed_modifiers::{SpeedModifiers, MovementSpeed, PowerLevelEffects};
+use crate::sim::zones::InZone;
 
 #[derive(Resource, Default, Copy, Clone, Eq, PartialEq, Debug)]
 pub enum BuildMode {
@@ -40,10 +41,12 @@ pub fn place_building_system(
             if let Ok(core_pos) = core_query.get_single() {
                 commands.spawn((
                     crate::sim::entities::Bot::default(),
+                    crate::sim::movement::Pathfinder::new(),
                     crate::sim::entities::Position {
                         x: core_pos.x,
                         y: (core_pos.y as i32 + 2) as u32,
                     },
+                    InZone::default(),
                     PowerConsumer::new(2.0, 5.0, 0.5),
                     SpeedModifiers::default(),
                     MovementSpeed::new(1.0),

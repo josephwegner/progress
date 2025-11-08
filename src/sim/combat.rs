@@ -1,7 +1,6 @@
 use bevy::prelude::*;
-use crate::sim::entities::Position;
+use crate::sim::entities::{Position, SCOUT_JAMMING_RADIUS};
 use crate::sim::conditions::{Condition, ConditionType};
-use crate::sim::scouts::SCOUT_JAMMING_RADIUS;
 
 /// How often an attacker attempts to execute its attack
 pub const ATTACK_INTERVAL: f32 = 1.0; // seconds

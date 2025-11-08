@@ -1,6 +1,7 @@
 use bevy::prelude::*;
 use crate::sim::resources::GameResources;
 use crate::sim::notifications::{Notification, NotificationSeverity};
+use crate::WorldGrid;
 
 const WIN_TIME_SECONDS: f32 = 300.0; // 5 minutes
 const POWER_COLLAPSE_THRESHOLD: f32 = 60.0; // 60 seconds
@@ -34,9 +35,45 @@ impl PowerCollapseTimer {
     }
 }
 
+/// Tracks which tiles have changed this frame to invalidate affected paths
+#[derive(Resource, Default)]
+pub struct WorldChangeTracker {
+    pub tiles_changed: Vec<(u32, u32)>,
+}
+
 /// Marker for game over UI
 #[derive(Component)]
 pub struct GameOverUI;
+
+/// System: Check WorldGrid.chunk_dirty and populate WorldChangeTracker with changed tile positions
+/// Run in FixedUpdate, early (before invalidation)
+pub fn track_world_changes(
+    mut tracker: ResMut<WorldChangeTracker>,
+    grid: Res<crate::sim::grid::WorldGrid>,  // Need full path
+) {
+    tracker.tiles_changed.clear();
+
+    // Iterate through chunks
+    for cy in 0..grid.chunk_rows {
+        for cx in 0..grid.chunk_cols {
+            let chunk_idx = (cy * grid.chunk_cols + cx) as usize;
+
+            if grid.chunk_dirty[chunk_idx] {
+                // This chunk changed - mark all tiles in it as changed
+                let x_start = cx * grid.chunk_w;
+                let y_start = cy * grid.chunk_h;
+                let x_end = (x_start + grid.chunk_w).min(grid.w);
+                let y_end = (y_start + grid.chunk_h).min(grid.h);
+
+                for y in y_start..y_end {
+                    for x in x_start..x_end {
+                        tracker.tiles_changed.push((x, y));
+                    }
+                }
+            }
+        }
+    }
+}
 
 /// System: Check win condition (5 min survival, 50 compute, sustainable power)
 pub fn check_win_condition(

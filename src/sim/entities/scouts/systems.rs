@@ -1,42 +1,17 @@
 use bevy::prelude::*;
 use rand::Rng;
 use crate::sim::grid::{WorldGrid, TileKind};
-use crate::sim::entities::{AICore, Position, Path};
+use crate::sim::entities::{Position, Path};
+use crate::sim::entities::ai_core::AICore;
+use crate::sim::entities::scouts::{Scout, ScoutState, ScoutSpawnTimer, SCOUT_DETECTION_RADIUS, SCOUT_WANDER_RANGE, SCOUT_PATHING_RADIUS};
 use crate::sim::pathfinding::find_path;
 use crate::sim::combat::{Attacker, AttackType, ATTACK_INTERVAL};
 use crate::sim::speed_modifiers::{SpeedModifiers, MovementSpeed};
 use crate::sim::notifications::{Notification, NotificationSeverity};
 
-pub const SCOUT_DETECTION_RADIUS: f32 = 15.0;
-pub const SCOUT_JAMMING_RADIUS: f32 = 5.0;
-pub const SCOUT_WANDER_RANGE: u32 = 10;
-pub const SCOUT_SPAWN_INTERVAL: f32 = 120.0; // seconds
-pub const SCOUT_PATHING_RADIUS: f32 = 1.0;
-
-#[derive(Component, Clone, Debug, PartialEq, Eq)]
-pub enum ScoutState {
-    Wandering,
-    Detected,
-    Jamming,
-}
-
-#[derive(Component, Clone, Debug)]
-pub struct Scout {
-    pub state: ScoutState
-}
-
-#[derive(Resource)]
-pub struct ScoutSpawnTimer {
-    pub timer: Timer,
-}
-
-impl Default for ScoutSpawnTimer {
-    fn default() -> Self {
-        Self {
-            timer: Timer::from_seconds(SCOUT_SPAWN_INTERVAL, TimerMode::Repeating),
-        }
-    }
-}
+// ============================================================================
+// SYSTEMS
+// ============================================================================
 
 /// Spawns scouts at map edges on a timer
 pub fn spawn_scouts_system(
@@ -48,7 +23,7 @@ pub fn spawn_scouts_system(
 ) {
     timer_resource.timer.tick(time.delta());
 
-    // Manual spawn with 'S' key
+    // Manual spawn with 'M' key or timer
     let should_spawn = timer_resource.timer.just_finished() || keyboard.just_pressed(KeyCode::KeyM);
 
     if should_spawn {
@@ -62,6 +37,78 @@ pub fn spawn_scouts_system(
         timer_resource.timer.reset();
     }
 }
+
+/// Moves scouts towards their target, chooses new target when reached
+pub fn scout_movement_system(
+    mut commands: Commands,
+    mut scouts: Query<(Entity, &mut Scout, &Position, Option<&Path>), With<Scout>>,
+    grid: Res<WorldGrid>
+) {
+    for (entity, mut scout, position, path) in scouts.iter_mut() {
+        // Only assign new paths when scout has no path
+        // Path traversal and removal is handled by move_entities_along_path system
+        if path.is_none() && scout.state != ScoutState::Jamming {
+            if scout.state != ScoutState::Wandering {
+                scout.state = ScoutState::Wandering;
+            }
+
+            let target = choose_random_destination(position, &grid);
+            if let Some(path_nodes) = find_path(position.clone(), target.clone(), &grid) {
+                commands.entity(entity).insert(Path {
+                    nodes: path_nodes,
+                    current_idx: 0,
+                    movement_cooldown: 0.0,
+                });
+            }
+        }
+    }
+}
+
+/// Checks if any scout can detect the AI Core
+pub fn scout_detection_system(
+    mut commands: Commands,
+    mut scouts: Query<(Entity, &mut Scout, &Position), With<Scout>>,
+    ai_core: Query<&Position, With<AICore>>,
+    grid: Res<WorldGrid>,
+) {
+    if let Ok(ai_core_pos) = ai_core.get_single() {
+        for (entity, mut scout, position) in scouts.iter_mut() {
+            let distance = (position.x as f32 - ai_core_pos.x as f32).powi(2) + (position.y as f32 - ai_core_pos.y as f32).powi(2);
+
+            if scout.state != ScoutState::Jamming && distance <= SCOUT_PATHING_RADIUS.powi(2) {
+                scout.state = ScoutState::Jamming;
+                commands.entity(entity).remove::<Path>();
+                commands.entity(entity).insert(Attacker {
+                    cooldown: Timer::from_seconds(ATTACK_INTERVAL, TimerMode::Repeating),
+                    attack_type: AttackType::JammingPulse,
+                });
+                info!("Scout at ({},{}) is jamming", position.x, position.y);
+
+                continue;
+            } else if scout.state != ScoutState::Detected && scout.state != ScoutState::Jamming {
+                if distance <= SCOUT_DETECTION_RADIUS.powi(2) && !is_line_blocked_by_walls(position, ai_core_pos, &grid) {
+                    info!("Scout at ({},{}) is detected at distance {}", position.x, position.y, distance);
+                let path_to_core = find_path(position.clone(), ai_core_pos.clone(), &grid);
+
+                    if let Some(path_nodes) = path_to_core {
+                        commands.entity(entity).remove::<Path>();
+                        commands.entity(entity).insert(Path {
+                            nodes: path_nodes,
+                            current_idx: 0,
+                            movement_cooldown: 0.0,
+                        });
+                    }
+
+                    scout.state = ScoutState::Detected;
+                }
+            }
+        }
+    }
+}
+
+// ============================================================================
+// HELPER FUNCTIONS
+// ============================================================================
 
 /// Helper: Spawn a single scout at a random edge position
 fn spawn_scout(commands: &mut Commands, grid: &WorldGrid) {
@@ -117,74 +164,6 @@ fn choose_random_position_on_edge(edge: Edge, grid: &WorldGrid) -> (u32, u32) {
     }
 }
 
-/// Moves scouts towards their target, chooses new target when reached
-pub fn scout_movement_system(
-    mut commands: Commands,
-    mut scouts: Query<(Entity, &mut Scout, &Position, Option<&Path>), With<Scout>>,
-    grid: Res<WorldGrid>
-) {
-    for (entity, mut scout, position, path) in scouts.iter_mut() {
-        // Only assign new paths when scout has no path
-        // Path traversal and removal is handled by move_entities_along_path system
-        if path.is_none() && scout.state != ScoutState::Jamming {
-            if scout.state != ScoutState::Wandering {
-                scout.state = ScoutState::Wandering;
-            }
-
-            let target = choose_random_destination(position, &grid);
-            if let Some(path_nodes) = find_path(position.clone(), target.clone(), &grid) {
-                commands.entity(entity).insert(crate::sim::entities::Path {
-                    nodes: path_nodes,
-                    current_idx: 0,
-                    movement_cooldown: 0.0,
-                });
-            }
-        }
-    }
-}
-
-/// Checks if any scout can detect the AI Core
-pub fn scout_detection_system(
-    mut commands: Commands,
-    mut scouts: Query<(Entity, &mut Scout, &Position), With<Scout>>,
-    ai_core: Query<&Position, With<AICore>>,
-    grid: Res<WorldGrid>,
-) {
-    if let Ok(ai_core_pos) = ai_core.get_single() {
-        for (entity, mut scout, position) in scouts.iter_mut() {
-            let distance = (position.x as f32 - ai_core_pos.x as f32).powi(2) + (position.y as f32 - ai_core_pos.y as f32).powi(2);
-
-            if scout.state != ScoutState::Jamming && distance <= SCOUT_PATHING_RADIUS.powi(2) {
-                scout.state = ScoutState::Jamming;
-                commands.entity(entity).remove::<Path>();
-                commands.entity(entity).insert(Attacker {
-                    cooldown: Timer::from_seconds(ATTACK_INTERVAL, TimerMode::Repeating),
-                    attack_type: AttackType::JammingPulse,
-                });
-                info!("Scout at ({},{}) is jamming", position.x, position.y);
-
-                continue;
-            } else if scout.state != ScoutState::Detected && scout.state != ScoutState::Jamming {
-                if distance <= SCOUT_DETECTION_RADIUS.powi(2) && !is_line_blocked_by_walls(position, ai_core_pos, &grid) {
-                    info!("Scout at ({},{}) is detected at distance {}", position.x, position.y, distance);
-                    let path_to_core = find_path(position.clone(), ai_core_pos.clone(), &grid);
-
-                    if let Some(path_nodes) = path_to_core {
-                        commands.entity(entity).remove::<Path>();
-                        commands.entity(entity).insert(Path {
-                            nodes: path_nodes,
-                            current_idx: 0,
-                            movement_cooldown: 0.0,
-                        });
-                    }
-
-                    scout.state = ScoutState::Detected;
-                }
-            }
-        }
-    }
-}
-
 /// Helper: Choose random destination within SCOUT_WANDER_RANGE tiles
 fn choose_random_destination(
     position: &Position,
@@ -232,58 +211,4 @@ fn is_line_blocked_by_walls(
     }
 
     false
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    // Test: Scout spawns at map edge
-    #[test]
-    fn test_scout_spawns_at_edge() {
-        // Setup world with grid
-        // Call spawn_scout
-        // Assert scout Position is at x=0 or x=MAP_W-1 or y=0 or y=MAP_H-1
-        todo!("Implement test")
-    }
-
-    // Test: Scout chooses random destination within 10 tiles
-    #[test]
-    fn test_scout_picks_random_destination() {
-        // Setup scout at position (5, 5)
-        // Call scout_choose_destination
-        // Assert destination is within 10 tile radius
-        todo!("Implement test")
-    }
-
-    // Test: Scout detects AI Core within radius
-    #[test]
-    fn test_scout_detects_ai_core_in_range() {
-        // Setup scout at (10, 10)
-        // Setup AI Core at (15, 15) - within detection radius
-        // No walls between them
-        // Call scout_detection_system
-        // Assert scout state is Detected
-        todo!("Implement test")
-    }
-
-    // Test: Scout cannot detect through walls
-    #[test]
-    fn test_scout_blocked_by_walls() {
-        // Setup scout and AI Core within detection radius
-        // Add wall tiles between them
-        // Call scout_detection_system
-        // Assert scout state is still Wandering
-        todo!("Implement test")
-    }
-
-    // Test: Scout spawns on timer
-    #[test]
-    fn test_scout_spawn_timer() {
-        // Setup ScoutSpawnTimer with short interval
-        // Advance time past interval
-        // Call spawn_scouts_system
-        // Assert new scout entity exists
-        todo!("Implement test")
-    }
 }

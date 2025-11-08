@@ -70,13 +70,16 @@ impl GameResources {
 pub fn tick_resources(
     mut resources: ResMut<GameResources>,
     time: Res<Time>,
-    bot_query: Query<&crate::sim::entities::Bot>,
+    bot_query: Query<(&crate::sim::entities::Bot, Option<&crate::sim::entities::bots::HasJob>, Option<&crate::sim::entities::bots::CarryingScrap>)>,
 ) {
     let mut bot_power_drain = 0;
-    for bot in bot_query.iter() {
-        bot_power_drain += match bot.state {
-            crate::sim::entities::BotState::Idle => bot.power_drain_idle,
-            _ => bot.power_drain_active,
+    for (bot, has_job, carrying_scrap) in bot_query.iter() {
+        // Bot is active if it has a job or is carrying scrap, otherwise idle
+        let is_active = has_job.is_some() || carrying_scrap.is_some();
+        bot_power_drain += if is_active {
+            bot.power_drain_active
+        } else {
+            bot.power_drain_idle
         };
     }
 

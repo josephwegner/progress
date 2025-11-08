@@ -3,6 +3,10 @@ use bevy::window::PrimaryWindow;
 use bevy::input::mouse::MouseWheel;
 use crate::sim::grid::{WorldGrid, TILE_SIZE, TileKind};
 use bevy::render::camera::RenderTarget;
+use crate::sim::jobs::{Job, JobType};
+use crate::sim::zones::ZonedJobQueue;
+use crate::sim::zones::ReachabilityZones;
+use crate::sim::buildings::BuildMode;
 
 #[derive(Resource, Default, Copy, Clone, Eq, PartialEq, Debug)]
 pub enum PaintTool { #[default] Scavenge, Stockpile }
@@ -64,12 +68,13 @@ pub fn paint_brush(
     q_primary: Query<&Window, With<PrimaryWindow>>,
     q_cam: Query<(&Camera, &GlobalTransform), With<MainCamera>>,
     mut grid: ResMut<WorldGrid>,
-    mut job_queue: ResMut<crate::sim::jobs::JobQueue>,
+    mut job_queue: ResMut<ZonedJobQueue>,
     tool: Res<PaintTool>,
-    build_mode: Res<crate::sim::buildings::BuildMode>,
+    build_mode: Res<BuildMode>,
+    zones: Res<ReachabilityZones>,
 ) {
     if !buttons.pressed(MouseButton::Left) { return; }
-    if *build_mode != crate::sim::buildings::BuildMode::None { return; }
+    if *build_mode != BuildMode::None { return; }
 
     let Ok((camera, cam_xform)) = q_cam.get_single() else { return; };
 
@@ -103,11 +108,14 @@ pub fn paint_brush(
 
             // Create job immediately when painting Scavenge tile
             if kind == TileKind::Scavenge {
-                job_queue.push(
-                    crate::sim::jobs::JobType::Scavenge { x: gx, y: gy },
-                    10,
-                    &mut commands,
-                );
+                let zone_id = zones.get_zone(gx, gy);
+                if let Some(zone_id) = zone_id {
+                    let job_entity = commands.spawn(Job {
+                        job_type: JobType::Scavenge { x: gx, y: gy },
+                        priority: 10,
+                    }).id();
+                    job_queue.push(zone_id, 10, job_entity);
+                }
             }
         }
     }

@@ -5,7 +5,6 @@ use std::env;
 pub struct DebugSettings {
     pub log_pathfinding: bool,
     pub log_jobs: bool,
-    pub log_bot_behavior: bool,
 }
 
 impl DebugSettings {
@@ -23,18 +22,12 @@ impl DebugSettings {
                 .parse()
                 .unwrap_or(false);
 
-            let log_bot_behavior = option_env!("DEBUG_BOT_BEHAVIOR")
-                .unwrap_or("false")
-                .parse()
-                .unwrap_or(false);
-
-            info!("Debug settings (WASM) - Pathfinding: {}, Jobs: {}, Bot Behavior: {}",
-                  log_pathfinding, log_jobs, log_bot_behavior);
+            info!("Debug settings (WASM) - Pathfinding: {}, Jobs: {}",
+                  log_pathfinding, log_jobs);
 
             Self {
                 log_pathfinding,
                 log_jobs,
-                log_bot_behavior,
             }
         }
 
@@ -50,19 +43,8 @@ impl DebugSettings {
                 .parse()
                 .unwrap_or(false);
 
-            let log_bot_behavior = env::var("DEBUG_BOT_BEHAVIOR")
-                .unwrap_or_else(|_| "false".to_string())
-                .parse()
-                .unwrap_or(false);
-
-            info!("Debug settings - Pathfinding: {}, Jobs: {}, Bot Behavior: {}",
-                  log_pathfinding, log_jobs, log_bot_behavior);
-
-            Self {
-                log_pathfinding,
-                log_jobs,
-                log_bot_behavior,
-            }
+            info!("Debug settings - Pathfinding: {}, Jobs: {}",
+                  log_pathfinding, log_jobs);
         }
     }
 }
