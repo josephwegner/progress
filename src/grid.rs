@@ -1,10 +1,11 @@
 use bevy::prelude::*;
+use std::collections::HashSet;
 
 pub const GRID_WIDTH: u32 = 20;
 pub const GRID_HEIGHT: u32 = 20;
 pub const TILE_SIZE: f32 = 32.0;
 
-#[derive(Component, Clone)]
+#[derive(Component, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Position {
   pub x: u32,
   pub y: u32,
@@ -48,6 +49,9 @@ impl Tile {
   }
 }
 
+#[derive(Component)]
+pub struct Impassable { }
+
 #[derive(Resource)]
 pub struct Grid {
   pub width: u32,
@@ -60,6 +64,51 @@ impl Grid {
   pub fn new(width: u32, height: u32, tile_size: f32) -> Self {
     let capacity = (width * height) as usize;
     Self { width, height, tile_size, tiles: vec![None; capacity] }
+  }
+
+  pub fn flood_search(&self, position: &Position, impassable_entities: &HashSet<Entity>) -> Vec<Entity> {
+    use std::collections::VecDeque;
+
+    let mut queue = VecDeque::new();
+    let mut visited = HashSet::new();
+    let mut results = Vec::new();
+
+    queue.push_back(position.clone());
+    visited.insert(position.index());
+
+    while let Some(current_pos) = queue.pop_front() {
+      let idx = current_pos.index();
+
+      if let Some(Some(tile)) = self.tiles.get(idx) {
+        results.extend(&tile.residents);
+
+        let has_impassable = tile.residents.iter()
+          .any(|entity| impassable_entities.contains(entity));
+
+        if !has_impassable {
+          let directions = [
+            (current_pos.x.wrapping_sub(1), current_pos.y),
+            (current_pos.x + 1, current_pos.y),
+            (current_pos.x, current_pos.y.wrapping_sub(1)),
+            (current_pos.x, current_pos.y + 1),
+          ];
+
+          for (nx, ny) in directions {
+            if nx < self.width && ny < self.height {
+              let neighbor_pos = Position::new(nx, ny);
+              let neighbor_idx = neighbor_pos.index();
+
+              if !visited.contains(&neighbor_idx) {
+                visited.insert(neighbor_idx);
+                queue.push_back(neighbor_pos);
+              }
+            }
+          }
+        }
+      }
+    }
+
+    results
   }
 
   fn index(&self, x: u32, y: u32) -> usize {

@@ -1,6 +1,9 @@
 use bevy::prelude::*;
 use crate::grid::{Position, Grid};
 use crate::renderable::Renderable;
+use crate::entities::scrap::Scrap;
+use crate::entities::bot::Bot;
+use crate::grid::Impassable;
 
 pub fn spawn_initial_components(mut commands: Commands, grid: Res<Grid>) {
   spawn_scrap(&mut commands, 5, 15);
@@ -9,9 +12,18 @@ pub fn spawn_initial_components(mut commands: Commands, grid: Res<Grid>) {
 }
 
 fn spawn_scrap(commands: &mut Commands, x: u32, y: u32) {
-  commands.spawn((Renderable::new(0.2, 0.5, 0.5), Position::new(x, y)));
+  commands.spawn((
+    Renderable::new(0.2, 0.5, 0.5),
+    Position::new(x, y),
+    Scrap::new(50),
+    Impassable {},
+  ));
 }
 
 fn spawn_bot(commands: &mut Commands, x: u32, y: u32) {
-  commands.spawn((Renderable::new(0.2, 0.2, 0.8), Position::new(x, y)));
+  commands.spawn((
+    Renderable::new(0.2, 0.2, 0.8),
+    Position::new(x, y),
+    Bot::new(),
+  ));
 }
