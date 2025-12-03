@@ -2,6 +2,7 @@ use bevy::prelude::*;
 use crate::grid::{Position, Grid, Impassable};
 use crate::entities::scrap::Scrap;
 use crate::reservation::{ReservationSystem, ReservationKey};
+use crate::pathfinding::{Path, distance};
 
 #[derive(Component)]
 pub struct Bot {
@@ -52,4 +53,44 @@ pub fn find_bot_jobs(
             }
         }
     }
+}
+
+pub fn work(
+  bots: Query<(Entity, &Bot, &Position, Option<&Path>)>,
+  scrap: Query<&Position, With<Scrap>>,
+  mut commands: Commands
+) {
+  for (bot_entity, bot, bot_position, path) in bots.iter() {
+    let Some(reservation_key) = &bot.current_reservation else {
+      continue;
+    };
+
+    match reservation_key {
+      ReservationKey::Tile(_tile_pos) => {
+        warn!("Bot {:?} has a tile reservation {:?}. This should not happen.", bot_entity, reservation_key);
+      },
+      ReservationKey::Entity(scrap_entity) => {
+        if let Ok(scrap_position) = scrap.get(*scrap_entity) {
+          work_on_scrap(&mut commands, bot_entity, bot_position, scrap_position, *scrap_entity, path);
+        } else {
+          warn!("Bot {:?} has a non-scrap reservation {:?}. This should not happen.", bot_entity, reservation_key);
+        }
+      },
+    }
+  }
+}
+
+fn work_on_scrap(
+  commands: &mut Commands,
+  bot_entity: Entity,
+  bot_position: &Position,
+  scrap_position: &Position,
+  scrap_entity: Entity,
+  bot_path: Option<&Path>
+) {
+  if distance(bot_position, scrap_position) <= 1.0 {
+    info!("Bot {:?} is ready to mine scrap {:?}", bot_entity, scrap_entity);
+  } else if bot_path.is_none() {
+    commands.entity(bot_entity).insert(Path::new(*scrap_position));
+  }
 }

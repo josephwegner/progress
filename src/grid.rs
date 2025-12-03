@@ -5,7 +5,7 @@ pub const GRID_WIDTH: u32 = 20;
 pub const GRID_HEIGHT: u32 = 20;
 pub const TILE_SIZE: f32 = 32.0;
 
-#[derive(Component, Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Component, Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct Position {
   pub x: u32,
   pub y: u32,
