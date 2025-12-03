@@ -5,9 +5,11 @@ mod entities;
 mod reservation;
 mod pathfinding;
 mod movement;
+mod interact;
 
 use bevy::prelude::*;
 use reservation::ReservationSystem;
+use renderable::SpriteMapping;
 
 fn init() -> Result<(), String> {
     Ok(())
@@ -24,6 +26,7 @@ fn main() -> Result<(), String> {
             ..default()
         }))
         .init_resource::<ReservationSystem>()
+        .init_resource::<SpriteMapping>()
         .insert_resource(Time::<Fixed>::from_hz(10.0))
         .add_systems(Startup, (setup_camera, grid::setup_grid))
         .add_systems(Startup, spawn::spawn_initial_components.after(grid::setup_grid))
@@ -31,10 +34,13 @@ fn main() -> Result<(), String> {
         .add_systems(Update, grid::update_residents)
         .add_systems(Update, renderable::spawn_sprites_for_new_renderables)
         .add_systems(Update, renderable::update_sprite_positions)
-        .add_systems(FixedUpdate, entities::bot::find_bot_jobs)
-        .add_systems(FixedUpdate, entities::bot::work)
-        .add_systems(FixedUpdate, pathfinding::pathfind)
+        .add_systems(Update, renderable::cleanup_despawned_sprites)
+        .add_systems(Update, entities::bot::find_bot_jobs)
+        .add_systems(Update, entities::bot::work)
+        .add_systems(Update, pathfinding::pathfind)
+        .add_systems(Update, renderable::draw_interaction_progress_bars)
         .add_systems(FixedUpdate, movement::move_along_path)
+        .add_systems(FixedUpdate, interact::update_interactions)
         .run();
 
     Ok(())

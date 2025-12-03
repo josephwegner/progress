@@ -3,6 +3,7 @@ use crate::grid::{Position, Grid, Impassable};
 use crate::entities::scrap::Scrap;
 use crate::reservation::{ReservationSystem, ReservationKey};
 use crate::pathfinding::{Path, distance};
+use crate::interact::Interaction;
 
 #[derive(Component)]
 pub struct Bot {
@@ -56,11 +57,11 @@ pub fn find_bot_jobs(
 }
 
 pub fn work(
-  bots: Query<(Entity, &Bot, &Position, Option<&Path>)>,
+  bots: Query<(Entity, &Bot, &Position, Option<&Path>, Option<&Interaction>)>,
   scrap: Query<&Position, With<Scrap>>,
   mut commands: Commands
 ) {
-  for (bot_entity, bot, bot_position, path) in bots.iter() {
+  for (bot_entity, bot, bot_position, path, interaction) in bots.iter() {
     let Some(reservation_key) = &bot.current_reservation else {
       continue;
     };
@@ -71,7 +72,7 @@ pub fn work(
       },
       ReservationKey::Entity(scrap_entity) => {
         if let Ok(scrap_position) = scrap.get(*scrap_entity) {
-          work_on_scrap(&mut commands, bot_entity, bot_position, scrap_position, *scrap_entity, path);
+          work_on_scrap(&mut commands, bot_entity, bot_position, scrap_position, *scrap_entity, path, interaction);
         } else {
           warn!("Bot {:?} has a non-scrap reservation {:?}. This should not happen.", bot_entity, reservation_key);
         }
@@ -86,10 +87,19 @@ fn work_on_scrap(
   bot_position: &Position,
   scrap_position: &Position,
   scrap_entity: Entity,
-  bot_path: Option<&Path>
+  bot_path: Option<&Path>,
+  interaction: Option<&Interaction>
 ) {
   if distance(bot_position, scrap_position) <= 1.0 {
-    info!("Bot {:?} is ready to mine scrap {:?}", bot_entity, scrap_entity);
+    if interaction.is_none() {
+      info!("Bot {:?} is ready to mine scrap {:?}", bot_entity, scrap_entity);
+      commands.entity(bot_entity).insert(Interaction::new(bot_entity, scrap_entity, 50));
+    } else if interaction.unwrap().completed {
+      info!("Bot {:?} has completed interaction with scrap {:?}", bot_entity, scrap_entity);
+      commands.entity(bot_entity).remove::<Interaction>();
+      commands.entity(bot_entity).remove::<Path>();
+      commands.entity(scrap_entity).despawn();
+    }
   } else if bot_path.is_none() {
     commands.entity(bot_entity).insert(Path::new(*scrap_position));
   }
